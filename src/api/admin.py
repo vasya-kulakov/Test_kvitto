@@ -6,11 +6,16 @@ router = APIRouter()
 def reset_database():
     """
     Endpoint to reset the database.
-    This will drop all tables and recreate them.
+    Drops all tables (and sqlite file) and then recreates tables and seeds initial data.
     """
-    from ..database import reset_db
+    from ..database import reset_db, create_database
     import asyncio
-    # Run the reset_db function in an event loop
-    asyncio.run(reset_db(drop_sqlite_file=True))
-    
-    return {"message": "Database has been reset."}
+
+    # Выполняем сброс и затем создание/инициализацию БД в одном event loop
+    async def _reset_and_create():
+        await reset_db(drop_sqlite_file=True)
+        await create_database()
+
+    asyncio.run(_reset_and_create())
+
+    return {"message": "Database has been reset and initialized."}
