@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 import os
 from typing import AsyncGenerator, Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
@@ -33,43 +32,14 @@ class AsyncClient:
             self.async_session = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
 
     async def init(self) -> None:
-        """Инициализация движка, импорт моделей и создание таблиц.
 
-        Импорт моделей выполняется до вызова create_all(), чтобы
-        метаданные всех моделей были зарегистрированы в Base.metadata.
-        После создания таблиц выполняется заполнение тарифов, если таблица пустая.
-        """
-        # Импортируем модуль models, чтобы декларативные модели были зарегистрированы
-        import importlib
-
-        importlib.import_module(".models", package=__package__)
-
+        # Убедимся, что движок и сессии созданы
         self._create()
-        assert self.engine is not None
-        async with self.engine.begin() as conn:
-            # Создание таблиц синхронно внутри асинхронного соединения
-            await conn.run_sync(Base.metadata.create_all)
 
-        # После создания таблиц — проверим и при необходимости заполним таблицу тарифов
-        # Импорт модели внутри функции, чтобы избежать проблем с цикличными импортами
-        from .models import Tariff  # local import
+        # Импортируем модуль и вызываем инициализацию (create_all + seed)
+        from . import init_db
 
-        if self.async_session is None:
-            self._create()
-
-        assert self.async_session is not None
-        async with self.async_session() as session:
-            q = select(Tariff).limit(1)
-            result = await session.execute(q)
-            exists = result.scalars().first()
-            if not exists:
-                tariffs = [
-                    Tariff(name="basic", price=990000),
-                    Tariff(name="standard", price=1990000),
-                    Tariff(name="premium", price=2990000),
-                ]
-                session.add_all(tariffs)
-                await session.commit()
+        await init_db.initialize(self)
 
     async def close(self) -> None:
         """Закрыть движок и соединения."""
