@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import os
 from typing import AsyncGenerator, Optional
 
@@ -32,7 +33,17 @@ class AsyncClient:
             self.async_session = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
 
     async def init(self) -> None:
-        """Инициализация движка и создание таблиц, если их нет."""
+        """Инициализация движка, импорт моделей и создание таблиц.
+
+        Импорт моделей выполняется до вызова create_all(), чтобы
+        метаданные всех моделей были зарегистрированы в Base.metadata.
+        После создания таблиц выполняется заполнение тарифов, если таблица пустая.
+        """
+        # Импортируем модуль models, чтобы декларативные модели были зарегистрированы
+        import importlib
+
+        importlib.import_module(".models", package=__package__)
+
         self._create()
         assert self.engine is not None
         async with self.engine.begin() as conn:
@@ -78,6 +89,7 @@ class AsyncClient:
 
         assert self.async_session is not None
 
+        @asynccontextmanager
         async def _session_generator() -> AsyncGenerator[AsyncSession, None]:
             async with self.async_session() as session:
                 yield session
