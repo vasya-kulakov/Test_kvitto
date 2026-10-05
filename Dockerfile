@@ -11,9 +11,12 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends build-essential libsqlite3-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
-# Install runtime Python dependencies
+# Install runtime Python dependencies from requirements.txt
 RUN pip install --upgrade pip
-RUN pip install fastapi uvicorn[standard] sqlalchemy aiosqlite pydantic
+
+# Copy only requirements first to leverage Docker cache
+COPY requirements.txt /app/requirements.txt
+RUN pip install -r /app/requirements.txt
 
 # Copy project
 COPY . /app

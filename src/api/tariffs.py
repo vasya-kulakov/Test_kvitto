@@ -4,7 +4,7 @@ from ..database.repository import TariffRepository
 router = APIRouter()
 
 @router.get('/tariffs')
-async def tariffs(session: AsyncSession = Depends(get_session)):
+async def tariffs(session: AsyncClient = Depends(get_session)):
     ans = await TariffRepository(session).get_tariffs()
     return ans
 
