@@ -36,10 +36,13 @@ class AsyncClient:
         # Убедимся, что движок и сессии созданы
         self._create()
 
-        # Импортируем модуль и вызываем инициализацию (create_all + seed)
-        from . import init_db
+        # Импортируем модуль init_db через importlib, чтобы гарантированно
+        # получить модуль, а не одноимённый атрибут из пакета.
+        import importlib
 
-        await init_db.initialize(self)
+        init_db_mod = importlib.import_module(f"{__package__}.init_db")
+        await init_db_mod.initialize(self)  # Теперь всё сработает
+
 
     async def close(self) -> None:
         """Закрыть движок и соединения."""
@@ -47,6 +50,39 @@ class AsyncClient:
             await self.engine.dispose()
             self.engine = None
             self.async_session = None
+
+    async def reset(self, drop_sqlite_file: bool = False) -> None:
+        """Удалить все таблицы из базы данных.
+
+        Если используется sqlite и drop_sqlite_file=True, удалит файл базы данных.
+        """
+        # Убедимся, что движок создан
+        self._create()
+
+        if self.engine is None:
+            return
+
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+
+        # Опционально удалить файл sqlite
+        if drop_sqlite_file and self.url.startswith("sqlite"):
+            # ожидаем формат sqlite+aiosqlite:///./test.db или sqlite:///./test.db
+            import re
+            import os
+
+            m = re.search(r"/{2,3}(.+)$", self.url)
+            if m:
+                path = m.group(1)
+                # относительный путь
+                if not os.path.isabs(path):
+                    path = os.path.join(os.getcwd(), path)
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception:
+                    # не фейлим при ошибке удаления
+                    pass
 
     def get_session(self) -> AsyncGenerator[AsyncSession, None]:
         """Вернуть контекстный менеджер для сессии.
@@ -72,16 +108,5 @@ async_client = AsyncClient()
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Утилита-генератор для внедрения сессии (например, в FastAPI).
-
-    Пример (FastAPI):
-        @app.on_event("startup")
-        async def startup():
-            await async_client.init()
-
-        async def get_db():
-            async with async_client.get_session() as session:
-                yield session
-    """
     async with async_client.get_session() as session:
         yield session

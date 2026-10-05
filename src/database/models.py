@@ -28,3 +28,42 @@ class Payment_method(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(length=100), unique=True, nullable=False, index=True)
     installment_months = Column(Integer, nullable=True, comment='For installment plan')
+
+
+
+class Payment(Base):
+    __tablename__ = 'payments'
+    id: int = Column(Integer, primary_key=True, index=True)
+    status: str = Column(String(length=50), nullable=False, index=True)
+    tariff_id: int = Column(Integer, nullable=False)
+    amount: int = Column(Integer, nullable=False, comment="Amount in kopecks")
+    discount: int | None = Column(Integer, nullable=True, comment="Discount in kopecks")
+    method: str = Column(String(length=50), nullable=False)
+    installment_months: int | None = Column(Integer, nullable=True)
+    schedule: int | None = Column(Integer, nullable=True, comment="Schedule")
+    email: str = Column(String(length=100), nullable=False, index=True)
+    created_at: str = Column(DateTime, default=datetime.utcnow)
+    idempotency_key: str | None = Column(String(length=100), unique=True, nullable=True, index=True)
+    def to_response(self) -> dict:
+        """Вернуть словарь-ответ для API, скрывая idempotency_key."""
+        return {
+            "id": self.id,
+            "status": self.status,
+            "tariff_id": self.tariff_id,
+            "amount": self.amount,
+            "discount": self.discount,
+            "method": self.method,
+            "installment_months": self.installment_months,
+            "schedule": self.schedule,
+            "email": self.email,
+            "created_at": self.created_at.isoformat() if self.created_at is not None else None,
+        }
+
+
+
+class AcceptBank(Base):
+    __tablename__ = 'accept_bank'
+    id: int = Column(Integer, primary_key=True, index=True)
+    payment_id: int = Column(Integer, nullable=False)
+    status: str = Column(String(length=50), nullable=False)
+    

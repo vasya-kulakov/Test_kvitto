@@ -20,6 +20,11 @@ init_db = async_client.init
 close_db = async_client.close
 
 
+async def reset_db(drop_sqlite_file: bool = False) -> None:
+    """Удалить все таблицы в базе данных. Опционально удалить sqlite-файл."""
+    await db.reset(drop_sqlite_file=drop_sqlite_file)
+
+
 async def create_database() -> None:
     """Удобная функция инициализации БД (создание таблиц и начальные данные).
 
@@ -38,5 +43,6 @@ __all__ = [
     "close_db",
     "Tariff",
     "TariffRepository"
+    ,"reset_db"
 ]
 
