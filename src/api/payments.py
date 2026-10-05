@@ -4,6 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..scripts.idempotency import IdempotentRequest, generate_key
 from fastapi.responses import JSONResponse
 from .pydantic_shamples import PaymentModel
+from .pydantic_example import (
+    PaymentResponse,
+    create_payment_example,
+    create_payment_promo_example,
+    create_payment_installment_example,
+    payment_response_example,
+)
 from ..database import get_session
 from ..database.repository import (
     PaymentRepository,
@@ -15,9 +22,20 @@ from ..database.repository import (
 router = APIRouter()
 
 
-@router.post("/payments")
+@router.post(
+    "/payments",
+    response_model=PaymentResponse,
+    responses={
+        201: {"description": "Created", "content": {"application/json": {"example": payment_response_example}}},
+        200: {"description": "Existing payment returned", "content": {"application/json": {"example": payment_response_example}}},
+    },
+)
 async def create_payment(
-    payload: PaymentModel = Body(...),
+    payload: PaymentModel = Body(..., examples={
+        "basic": create_payment_example,
+        "promo": create_payment_promo_example,
+        "installment": create_payment_installment_example,
+    }),
     idempotency_key: str | None = Depends(IdempotentRequest()),
     session: AsyncSession = Depends(get_session),
     request: Request = None,
@@ -73,7 +91,7 @@ async def create_payment(
     return JSONResponse(content=payment, status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
-@router.get("/payments/{payment_id}")
+@router.get("/payments/{payment_id}", response_model=PaymentResponse, responses={200: {"content": {"application/json": {"example": payment_response_example}}}})
 async def get_payment(payment_id: int, session: AsyncSession = Depends(get_session)):
     """Получить платёж по ID."""
     payment_repo = PaymentRepository(session)

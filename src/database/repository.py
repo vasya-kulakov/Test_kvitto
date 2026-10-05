@@ -3,6 +3,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+import json
 
 from .models import Tariff, Promocode, Payment_method, Payment
 
@@ -42,6 +43,25 @@ class PaymentMethodRepository:
         return result.scalars().first()
 
 
+class BankRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def change_status(self, payment_id: int, new_status: str) -> None:
+        right_changes = {
+            "pending": ["succeeded", "failed"],
+            "succeeded": ["refunded"]
+        }
+        q = select(Payment).where(Payment.id == payment_id)
+        result = await self.session.execute(q)
+        payment = result.scalars().first()
+        if payment:
+            if right_changes[payment.status] and new_status in right_changes[payment.status]:
+                payment.status = new_status
+                await self.session.commit()
+            else:
+                raise ValueError()
+
 class PaymentRepository:
     """Репозиторий для работы с платежами.
 
@@ -75,6 +95,19 @@ class PaymentRepository:
         платеж с таким ключом или создать новый; гонки обрабатываются через
         IntegrityError и повторный запрос к базе.
         """
+        # Подготовим schedule: если рассрочка указана (>1), разобьём сумму на части
+        schedule_json = None
+        if installment_months and installment_months > 1:
+            n = int(installment_months)
+            total = int(amount)
+            base = total // n
+            rem = total % n
+            # первые rem платежей получают по base+1, остальные по base
+            parts = [base + 1] * rem + [base] * (n - rem)
+            schedule_json = json.dumps(parts)
+
+        # используем schedule_json при создании записи
+
         if idempotency_key:
             # Сначала проверим, нет ли уже платежа с таким ключом
             q = select(Payment).where(Payment.idempotency_key == idempotency_key)
@@ -91,7 +124,7 @@ class PaymentRepository:
                 discount=discount,
                 method=method,
                 installment_months=installment_months,
-                schedule=schedule,
+                schedule=schedule_json,
                 email=email,
                 idempotency_key=idempotency_key,
             )
@@ -119,7 +152,7 @@ class PaymentRepository:
                 discount=discount,
                 method=method,
                 installment_months=installment_months,
-                schedule=schedule,
+                schedule=schedule_json,
                 email=email,
             )
             self.session.add(payment)
